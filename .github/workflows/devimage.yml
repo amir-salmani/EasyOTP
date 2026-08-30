@@ -75,7 +75,7 @@ jobs:
           echo "jdk:"; run 'java -version 2>&1 | head -1'
           echo "adb:"; run 'adb version | head -1'
           echo "sdk packages:"; run 'sdkmanager --list_installed'
-          for pkg in "build-tools;35.0.0" "platform-tools" "platforms;android-35"; do
+          for pkg in "build-tools;36.0.0" "build-tools;35.0.0" "platform-tools" "platforms;android-36" "platforms;android-35"; do
             run 'sdkmanager --list_installed' | grep -q "${pkg%%;*}" \
               || { echo "::error::missing SDK package $pkg"; exit 1; }
           done

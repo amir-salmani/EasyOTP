@@ -11,8 +11,13 @@ FROM eclipse-temurin:17-jdk-noble
 # these filenames carry a build number and rot without warning (the 2024
 # 11076708 build is already a 404). The default below is only a fallback.
 ARG CMDLINE_TOOLS_URL=https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-ARG ANDROID_API=35
-ARG BUILD_TOOLS=35.0.0
+# Two platforms: AGP 9 may require the newer one, and sdkmanager cannot fetch
+# packages from a workstation where dl.google.com is blocked (DECISIONS D10),
+# so everything the build might need has to ship in the image.
+ARG ANDROID_API=36
+ARG ANDROID_API_ALT=35
+ARG BUILD_TOOLS=36.0.0
+ARG BUILD_TOOLS_ALT=35.0.0
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk \
@@ -37,7 +42,9 @@ RUN set -eux; \
     sdkmanager --install \
         "platform-tools" \
         "platforms;android-${ANDROID_API}" \
-        "build-tools;${BUILD_TOOLS}" > /dev/null; \
+        "platforms;android-${ANDROID_API_ALT}" \
+        "build-tools;${BUILD_TOOLS}" \
+        "build-tools;${BUILD_TOOLS_ALT}" > /dev/null; \
     rm -rf "$ANDROID_HOME/.temp" /root/.android
 
 # Match the host uid/gid so bind-mounted sources do not end up root-owned.
