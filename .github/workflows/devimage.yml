@@ -1,0 +1,65 @@
+name: dev-image
+
+# Builds the Android build environment where the network is unrestricted, and
+# publishes it to ghcr.io.
+#
+# This exists because the primary development machine is in Iran, where
+# dl.google.com (Android SDK) and Docker Hub are both blocked, but ghcr.io is
+# reachable. Building here and pulling there is the only path that works.
+#
+# It is also better than building locally regardless: the image CI tests against
+# is byte-identical to the one on the workstation.
+
+on:
+  push:
+    paths: [".devcontainer/**", ".github/workflows/devimage.yml"]
+  workflow_dispatch:
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: read
+      packages: write
+    steps:
+      - uses: actions/checkout@v4
+
+      # Google embeds a build number in the tools filename and retires old ones
+      # without notice, so resolve the current URL instead of pinning it.
+      - name: Resolve Android command-line tools URL
+        id: tools
+        run: |
+          set -euo pipefail
+          for m in repository2-3.xml repository2-1.xml; do
+            if xml=$(curl -fsSL --max-time 30 "https://dl.google.com/android/repository/$m"); then
+              if f=$(grep -o 'commandlinetools-linux-[0-9]\+_latest\.zip' <<<"$xml" | sort -u | tail -1); then
+                echo "url=https://dl.google.com/android/repository/$f" >> "$GITHUB_OUTPUT"
+                echo "resolved: $f"
+                exit 0
+              fi
+            fi
+          done
+          echo "::error::could not resolve command-line tools URL from any manifest"
+          exit 1
+
+      - uses: docker/setup-buildx-action@v3
+      - uses: docker/login-action@v3
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: docker/build-push-action@v6
+        with:
+          context: .devcontainer
+          push: true
+          # Built for the workstation user, which is uid/gid 1000.
+          build-args: |
+            CMDLINE_TOOLS_URL=${{ steps.tools.outputs.url }}
+            UID=1000
+            GID=1000
+          tags: |
+            ghcr.io/${{ github.repository_owner }}/easyotp-build:latest
+            ghcr.io/${{ github.repository_owner }}/easyotp-build:${{ github.sha }}
+          cache-from: type=gha
+          cache-to: type=gha,mode=max

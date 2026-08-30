@@ -213,3 +213,36 @@ its own storage that never sees message content or bot tokens. The cost is revoc
 lag bounded by the token TTL: a cancelled subscription keeps working until the token
 expires. That is an acceptable price for not holding a customer database next to
 other people's OTPs.
+
+---
+
+## D10 — The build environment is published, not built locally (2026-08-30)
+
+**Chosen:** CI builds the Android build image and pushes it to
+`ghcr.io/<owner>/easyotp-build`. Workstations pull it. `./dev pull` is the normal
+path; `./dev build-image` exists as a fallback.
+
+**Rejected:** each developer building the image from the Dockerfile.
+
+**Why:** the primary development machine is in Iran, and measured from it:
+
+| Endpoint | Result |
+|---|---|
+| `dl.google.com` (Android SDK) | 404 — including permanently valid URLs |
+| `developer.android.com` | 403 |
+| Docker Hub | 403 |
+| `ghcr.io` | reachable, pulls succeed |
+
+Google restricts Android developer downloads from Iranian addresses and Docker Inc.
+blocks Iran outright, so a local build fails at the base image before it ever reaches
+the SDK. A proxy may or may not cover these depending on its routing rules; depending
+on one is not a build system.
+
+Publishing the image is also better on its own terms: the environment CI tests in is
+byte-identical to the one on the workstation, which is the usual reason to do this
+anyway. The blockade only forced a good practice earlier than convenient.
+
+**Consequence:** contributors inside Iran need a `read:packages` token for ghcr.io and
+nothing else. Contributors elsewhere can use either path. This is worth stating in
+CONTRIBUTING — a project for Iranians that cannot be built from Iran would be a poor
+joke.

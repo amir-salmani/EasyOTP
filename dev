@@ -7,6 +7,7 @@
 set -euo pipefail
 
 IMAGE=easyotp-build
+REMOTE_IMAGE=${EASYOTP_IMAGE:-ghcr.io/amir-salmani/easyotp-build:latest}
 CONTAINER=easyotp-dev
 VOLUME=easyotp-gradle
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
@@ -17,8 +18,7 @@ have_container() { docker ps -aq -f name="^${CONTAINER}$" | grep -q .; }
 running()        { docker ps  -q -f name="^${CONTAINER}$" | grep -q .; }
 
 # Google's cmdline-tools filenames embed a build number and 404 without notice.
-# Resolve the current one from the repository manifest so the image never rots,
-# and fail fast with a readable message instead of mid-build.
+# Resolve the current one from the repository manifest so the image never rots.
 resolve_cmdline_tools() {
   local xml url
   [[ -n $TOOLS_URL_OVERRIDE ]] && { echo "$TOOLS_URL_OVERRIDE"; return 0; }
@@ -30,19 +30,35 @@ resolve_cmdline_tools() {
   return 1
 }
 
+# Preferred path: pull the image CI already built.
+#
+# The primary workstation is in Iran, where dl.google.com (Android SDK) and
+# Docker Hub are both blocked but ghcr.io is reachable. A local build cannot
+# succeed there -- it fails at the base image before it ever reaches the SDK.
+# Pulling also guarantees local and CI run the identical environment.
+pull_image() {
+  echo "pulling $REMOTE_IMAGE ..."
+  docker pull "$REMOTE_IMAGE" || return 1
+  docker tag "$REMOTE_IMAGE" "$IMAGE"
+}
+
 build_image() {
   local tools
   if ! tools=$(resolve_cmdline_tools); then
     cat >&2 <<'ERR'
-Could not reach dl.google.com to resolve the Android command-line tools URL.
+Cannot build the image locally: dl.google.com is unreachable from here.
 
-  - Behind a filtering proxy? The SDK download must be allowed.
-  - Offline? Retry when connected.
-  - Otherwise grab the current linux zip from
-    https://developer.android.com/studio#command-line-tools-only
-    and re-run with:  EASYOTP_TOOLS_URL=<url> ./dev up
+Google restricts Android SDK downloads from some regions, and Docker Hub blocks
+others, so a local build fails at the base image regardless. Use the image built
+by CI instead -- ghcr.io is reachable where those are not:
 
-Aborting before the multi-GB build rather than failing partway.
+    gh auth token | docker login ghcr.io -u <your-github-user> --password-stdin
+    ./dev pull
+
+Push to main (or run the dev-image workflow) if it has not been published yet.
+To force a local build anyway, supply the tools URL:
+
+    EASYOTP_TOOLS_URL=<url> ./dev build-image
 ERR
     return 1
   fi
@@ -53,8 +69,15 @@ ERR
     -t "$IMAGE" "$ROOT/.devcontainer"
 }
 
+ensure_image() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 && return 0
+  pull_image && return 0
+  echo "pull failed; attempting a local build" >&2
+  build_image
+}
+
 up() {
-  docker image inspect "$IMAGE" >/dev/null 2>&1 || build_image
+  ensure_image || return 1
   running && return 0
   have_container && { docker start "$CONTAINER" >/dev/null; return 0; }
   docker volume inspect "$VOLUME" >/dev/null 2>&1 || docker volume create "$VOLUME" >/dev/null
@@ -71,7 +94,9 @@ case "${1:-help}" in
   shell)   up; shift; docker exec -it "$CONTAINER" bash "$@" ;;
   run)     up; shift; docker exec -it "$CONTAINER" "$@" ;;
   build)   up; shift; docker exec -it "$CONTAINER" ./gradlew "${@:-assembleDebug}" ;;
-  rebuild) docker rmi -f "$IMAGE" 2>/dev/null || true; build_image ;;
+  pull)        pull_image ;;
+  build-image) build_image ;;
+  rebuild)     docker rmi -f "$IMAGE" 2>/dev/null || true; ensure_image ;;
 
   # Wireless ADB: Settings > Developer options > Wireless debugging on the handset.
   # Avoids USB passthrough and the udev rules this host does not have.
@@ -116,7 +141,9 @@ case "${1:-help}" in
 ./dev logcat             tail EasyOTP logs
 ./dev status             image/container/volume state + host memory
 ./dev stop               stop Gradle daemons and the container (frees RAM)
-./dev rebuild            rebuild the image from the Dockerfile
+./dev pull               pull the CI-built image from ghcr.io (use this in Iran)
+./dev build-image        build the image locally (needs dl.google.com)
+./dev rebuild            drop the local image and fetch it again
 ./dev purge              remove container, image and Gradle cache
 USAGE
     ;;
