@@ -49,7 +49,39 @@ jobs:
           username: ${{ github.actor }}
           password: ${{ secrets.GITHUB_TOKEN }}
 
-      - uses: docker/build-push-action@v6
+      # Build and smoke-test before publishing. The previous image was pushed
+      # broken and only failed at `docker run` on a workstation, after a 12-minute
+      # pull over a constrained link. Publishing an untested image is not free.
+      - name: Build for smoke test
+        uses: docker/build-push-action@v6
+        with:
+          context: .devcontainer
+          load: true
+          build-args: |
+            CMDLINE_TOOLS_URL=${{ steps.tools.outputs.url }}
+            UID=1000
+            GID=1000
+          tags: easyotp-build:smoketest
+          cache-from: type=gha
+          cache-to: type=gha,mode=max
+
+      - name: Smoke test
+        run: |
+          set -euo pipefail
+          run() { docker run --rm easyotp-build:smoketest bash -lc "$1"; }
+          echo "user resolves:"; run 'id -un'
+          echo "runs as uid 1000:"; test "$(run 'id -u')" = "1000"
+          echo "home is writable:"; run 'touch "$HOME/.gradle/.w"'
+          echo "jdk:"; run 'java -version 2>&1 | head -1'
+          echo "adb:"; run 'adb version | head -1'
+          echo "sdk packages:"; run 'sdkmanager --list_installed'
+          for pkg in "build-tools;35.0.0" "platform-tools" "platforms;android-35"; do
+            run 'sdkmanager --list_installed' | grep -q "${pkg%%;*}" \
+              || { echo "::error::missing SDK package $pkg"; exit 1; }
+          done
+
+      - name: Publish
+        uses: docker/build-push-action@v6
         with:
           context: .devcontainer
           push: true

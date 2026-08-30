@@ -41,12 +41,27 @@ RUN set -eux; \
     rm -rf "$ANDROID_HOME/.temp" /root/.android
 
 # Match the host uid/gid so bind-mounted sources do not end up root-owned.
+#
+# Ubuntu 24.04 (noble) bases ship an `ubuntu` account already holding uid/gid
+# 1000, which is the usual host uid. The collision has to be resolved explicitly:
+# an earlier version suppressed the useradd failure with `|| true`, which built a
+# perfectly good image with no `dev` user in it and failed only at `docker run`,
+# on someone else's machine, after a multi-GB pull. No error suppression here.
 ARG UID=1000
 ARG GID=1000
-RUN groupadd -g "$GID" dev 2>/dev/null || true; \
-    useradd -m -u "$UID" -g "$GID" -s /bin/bash dev 2>/dev/null || true; \
-    mkdir -p /home/dev/.gradle && chown -R "$UID:$GID" /home/dev; \
-    chown -R "$UID:$GID" "$ANDROID_HOME"
+RUN set -eux; \
+    if existing=$(getent passwd "$UID" | cut -d: -f1) && [ -n "$existing" ]; then \
+        userdel -r "$existing" 2>/dev/null || userdel "$existing"; \
+    fi; \
+    if existinggrp=$(getent group "$GID" | cut -d: -f1) && [ -n "$existinggrp" ]; then \
+        groupdel "$existinggrp" 2>/dev/null || true; \
+    fi; \
+    groupadd -g "$GID" dev; \
+    useradd -m -u "$UID" -g "$GID" -s /bin/bash dev; \
+    mkdir -p /home/dev/.gradle; \
+    chown -R "$UID:$GID" /home/dev "$ANDROID_HOME"; \
+    # Prove the account resolves, so a broken image fails the build, not the user.
+    id dev
 
 USER dev
 WORKDIR /workspace

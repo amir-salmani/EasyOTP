@@ -12,6 +12,15 @@ CONTAINER=easyotp-dev
 VOLUME=easyotp-gradle
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 MEM=${EASYOTP_MEM:-5g}
+
+# Run as the host uid/gid rather than trusting the image's USER. Ubuntu 24.04
+# bases ship an `ubuntu` account already holding uid 1000, so an image that
+# tried to create its own user there may not have one. Overriding here keeps
+# bind-mounted files host-owned and works whichever way the image was built.
+AS_USER=(--user "$(id -u):$(id -g)" -e HOME=/home/dev)
+
+# Allocate a TTY only when there is one, so ./dev works from scripts and CI.
+TTY=(-i); [[ -t 0 && -t 1 ]] && TTY=(-it)
 TOOLS_URL_OVERRIDE=${EASYOTP_TOOLS_URL:-}
 
 have_container() { docker ps -aq -f name="^${CONTAINER}$" | grep -q .; }
@@ -79,9 +88,16 @@ ensure_image() {
 up() {
   ensure_image || return 1
   running && return 0
-  have_container && { docker start "$CONTAINER" >/dev/null; return 0; }
+  # A container keeps the flags it was created with, so one made by an older
+  # ./dev stays broken forever. Recreate rather than leave it wedged.
+  if have_container; then
+    docker start "$CONTAINER" >/dev/null 2>&1 && return 0
+    echo "existing container will not start; recreating" >&2
+    docker rm -f "$CONTAINER" >/dev/null 2>&1 || true
+  fi
   docker volume inspect "$VOLUME" >/dev/null 2>&1 || docker volume create "$VOLUME" >/dev/null
   docker run -d --name "$CONTAINER" \
+    "${AS_USER[@]}" \
     --memory="$MEM" --memory-swap="$MEM" --cpus=4 \
     -v "$ROOT:/workspace" \
     -v "$VOLUME:/home/dev/.gradle" \
@@ -91,23 +107,23 @@ up() {
 
 case "${1:-help}" in
   up)      up; echo "container up (capped at $MEM)" ;;
-  shell)   up; shift; docker exec -it "$CONTAINER" bash "$@" ;;
-  run)     up; shift; docker exec -it "$CONTAINER" "$@" ;;
-  build)   up; shift; docker exec -it "$CONTAINER" ./gradlew "${@:-assembleDebug}" ;;
+  shell)   up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" bash "$@" ;;
+  run)     up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" "$@" ;;
+  build)   up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" ./gradlew "${@:-assembleDebug}" ;;
   pull)        pull_image ;;
   build-image) build_image ;;
   rebuild)     docker rmi -f "$IMAGE" 2>/dev/null || true; ensure_image ;;
 
   # Wireless ADB: Settings > Developer options > Wireless debugging on the handset.
   # Avoids USB passthrough and the udev rules this host does not have.
-  pair)    up; docker exec -it "$CONTAINER" adb pair "${2:?usage: ./dev pair HOST:PORT}" ;;
-  connect) up; docker exec -it "$CONTAINER" adb connect "${2:?usage: ./dev connect HOST:PORT}" ;;
-  install) up; docker exec -it "$CONTAINER" adb install -r \
+  pair)    up; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" adb pair "${2:?usage: ./dev pair HOST:PORT}" ;;
+  connect) up; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" adb connect "${2:?usage: ./dev connect HOST:PORT}" ;;
+  install) up; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" adb install -r \
              "app/build/outputs/apk/debug/app-debug.apk" ;;
-  logcat)  up; docker exec -it "$CONTAINER" adb logcat -s EasyOTP:V ;;
+  logcat)  up; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" adb logcat -s EasyOTP:V ;;
 
   stop)
-    running && docker exec "$CONTAINER" ./gradlew --stop >/dev/null 2>&1 || true
+    running && docker exec "${AS_USER[@]}" "$CONTAINER" ./gradlew --stop >/dev/null 2>&1 || true
     running && docker stop "$CONTAINER" >/dev/null || true
     echo "stopped; host RAM released"
     ;;
