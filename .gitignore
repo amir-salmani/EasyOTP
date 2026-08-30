@@ -1,0 +1,22 @@
+# Android
+*.iml
+.gradle/
+local.properties
+build/
+captures/
+.externalNativeBuild/
+.cxx/
+*.apk
+*.aab
+*.keystore
+*.jks
+
+# Worker
+node_modules/
+.wrangler/
+dist/
+.dev.vars
+
+# Editors / OS
+.idea/
+.DS_Store

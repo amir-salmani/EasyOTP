@@ -1,0 +1,132 @@
+# Decision log
+
+Format: one decision per entry. Date, what was chosen, what was rejected, why.
+Decisions here are settled — reopen only with new evidence, don't re-derive.
+
+---
+
+## D1 — Native Kotlin, not Tauri (2026-08-30)
+
+**Chosen:** 100% native Android (Kotlin + Jetpack Compose). No Tauri, no WebView.
+
+**Rejected:** Tauri v2 Android shell with a Kotlin plugin for the capture path.
+
+**Why:** A Tauri app is a WebView + Rust process. When Android kills that process —
+and it will, unattended, within hours — the Rust and JS are gone. A manifest-declared
+`BroadcastReceiver` for `SMS_RECEIVED` still fires with the app dead, because it is
+exempt from the implicit-broadcast ban. That means the entire critical path had to be
+Kotlin regardless, leaving Tauri as a UI skin over a native engine: added toolchain,
+added build surface, added APK size, zero benefit. Compose does the same job natively.
+
+---
+
+## D2 — Two front doors, one origin (2026-08-30)
+
+**Chosen:** `otp.services.amirsalmani.com` (Cloudflare zone → Worker custom domain) and
+`otp.services.rhinocloud.ir` (ArvanCloud CDN → origin `*.workers.dev`). Both terminate
+at the same Worker.
+
+**Rejected:** SMS fallback to a foreign number; independent second origin on an
+Iranian VPS.
+
+**Why (and the limit):** The dominant real-world failure is Iranian consumer ISPs
+DPI/SNI-blocking Cloudflare edge. The Arvan leg defeats that, because Arvan's
+international transit is not the path a consumer handset takes. It is fast (domestic,
+sub-50ms) and survives most disruption.
+
+It does **not** survive a full international cutoff — then Arvan→Cloudflare fails too.
+These are two front doors on one origin, not two failure domains. With SMS fallback
+declined, a national shutdown means messages queue on-device and deliver on restore.
+This is an accepted trade, made knowingly, not an oversight.
+
+**Escape hatch if it ever matters:** second origin on `omega-shatel-pve` (existing
+Iranian jump host) makes the legs genuinely independent. Deferred, not designed away.
+
+**To verify before building the .ir leg:** whether ArvanCloud permits a foreign origin
+at all, and whether it can override the Host header to the `workers.dev` hostname
+(Workers route by Host; without the override the origin fetch 404s). Arvan's own docs
+are unreachable from outside Iran — check via `omega-shatel-pve` or the panel.
+
+---
+
+## D3 — Stateless relay, no database (2026-08-30)
+
+**Chosen:** Worker persists nothing. All state — message archive, routing rules,
+destinations, credentials — lives on the phone. One Durable Object per channel acts
+as a **memory-only mailbox** for the seconds between a Telegram webhook arriving and
+the phone's long-poll collecting it. No storage writes.
+
+**Rejected:** D1 archive, KV-backed config, server-side dashboard.
+
+**Why:** Bidirectional messaging needs a rendezvous point, because the phone is behind
+CGNAT and cannot be reached inbound. A memory-only DO is the minimum structure that
+provides one. Anything persistent turns the relay into a target holding other people's
+OTPs, which is the exact thing the product exists to avoid. "We store nothing" has to
+be literally true or it is worthless.
+
+---
+
+## D4 — Bring-your-own bot; pairing approved on-device (2026-08-30)
+
+**Chosen:** Each user creates their own bot via @BotFather and pastes the token into
+the app. The app seals it and calls `/enroll`; the **Worker** calls Telegram
+`setWebhook` on the phone's behalf, then discards the token. The token rides inside
+the sealed envelope on every subsequent forward and is used transiently.
+
+Destination pairing: user messages their own bot, the update lands at the Worker, is
+parked in the DO mailbox, and the phone's long-poll retrieves it. The **app** then
+prompts the holder to approve that chat_id.
+
+**Rejected:** Server-side account system; server-held ACL; app calling Telegram directly.
+
+**Why:** `api.telegram.org` is blocked in Iran, so the phone cannot call `setWebhook`
+itself — the Worker must proxy it. And approving destinations on the device means the
+authorization root is physical possession of the handset, with no server-side list to
+breach or misconfigure. No accounts also means no PII and no user database.
+
+---
+
+## D5 — Crypto primitives (2026-08-30)
+
+**Chosen:**
+- Device identity: **ECDSA P-256** in Android Keystore, hardware-backed (StrongBox
+  when available, TEE otherwise). Signs every request over a canonical body+timestamp.
+- Payload sealing: **HPKE (RFC 9180)** — X25519 + HKDF-SHA256 + ChaCha20-Poly1305 —
+  to the Worker's public key.
+- Replay defence: timestamp window plus nonce.
+
+**Rejected:** Ed25519 in Keystore.
+
+**Why:** Android Keystore's Ed25519 support is narrow and version-dependent; ECDSA
+P-256 is hardware-backed on effectively every device we target. HPKE means Arvan and
+the Cloudflare edge relay opaque bytes — the `.ir` leg transits Iranian infrastructure
+under Iranian jurisdiction, and sealing is what makes that an acceptable trade rather
+than a bad one.
+
+---
+
+## D6 — Multiple bots, not forum topics (2026-08-30)
+
+**Chosen:** Routing table on-device: SIM (pinned to **ICCID**, so it survives a slot
+swap) → N destinations, each `(bot, chat_id, label)`. Different SIMs can target
+entirely different bots owned by different people.
+
+**Rejected:** One bot, per-SIM forum topics in a shared supergroup.
+
+**Why:** The two-SIM household case is the small case. The product case is N people
+who each want their own line in their own bot, not shared visibility into one group.
+Separate bots make the trust boundary per-person and need no supergroup setup. Topics
+remain possible for anyone who prefers a single bot; they are not the default.
+
+---
+
+## D7 — Foreground service type `specialUse` (2026-08-30)
+
+**Chosen:** `android:foregroundServiceType="specialUse"`.
+
+**Rejected:** `dataSync`.
+
+**Why:** Android 15 caps `dataSync` foreground services at 6 hours per 24h. A
+persistent forwarder using it dies daily, silently. `specialUse` has no such cap. The
+Play Store justification requirement for `specialUse` does not bind us — distribution
+is sideload/direct, and SMS permissions would disqualify us from Play anyway.
