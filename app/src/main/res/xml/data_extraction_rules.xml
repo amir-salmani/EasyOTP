@@ -1,0 +1,10 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!--
+  Nothing is eligible for cloud backup or device transfer. The database holds
+  message history and the Keystore-wrapped key; exporting either would move
+  other people's OTPs somewhere the threat model does not cover.
+-->
+<data-extraction-rules>
+    <cloud-backup><exclude domain="root" /></cloud-backup>
+    <device-transfer><exclude domain="root" /></device-transfer>
+</data-extraction-rules>
