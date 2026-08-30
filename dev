@@ -1,0 +1,123 @@
+#!/usr/bin/env bash
+# EasyOTP dev driver. Wraps the build container so nothing lands on the host.
+#
+# Memory discipline is the point: this host runs ~4GB free, so the container is
+# hard-capped and every long-lived JVM is stoppable. `./dev stop` when you walk
+# away; `./dev purge` to reclaim everything.
+set -euo pipefail
+
+IMAGE=easyotp-build
+CONTAINER=easyotp-dev
+VOLUME=easyotp-gradle
+ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
+MEM=${EASYOTP_MEM:-5g}
+TOOLS_URL_OVERRIDE=${EASYOTP_TOOLS_URL:-}
+
+have_container() { docker ps -aq -f name="^${CONTAINER}$" | grep -q .; }
+running()        { docker ps  -q -f name="^${CONTAINER}$" | grep -q .; }
+
+# Google's cmdline-tools filenames embed a build number and 404 without notice.
+# Resolve the current one from the repository manifest so the image never rots,
+# and fail fast with a readable message instead of mid-build.
+resolve_cmdline_tools() {
+  local xml url
+  [[ -n $TOOLS_URL_OVERRIDE ]] && { echo "$TOOLS_URL_OVERRIDE"; return 0; }
+  for m in repository2-3.xml repository2-1.xml; do
+    xml=$(curl -fsSL --max-time 20 "https://dl.google.com/android/repository/$m" 2>/dev/null) || continue
+    url=$(grep -o 'commandlinetools-linux-[0-9]\+_latest\.zip' <<<"$xml" | sort -u | tail -1) || true
+    [[ -n ${url:-} ]] && { echo "https://dl.google.com/android/repository/$url"; return 0; }
+  done
+  return 1
+}
+
+build_image() {
+  local tools
+  if ! tools=$(resolve_cmdline_tools); then
+    cat >&2 <<'ERR'
+Could not reach dl.google.com to resolve the Android command-line tools URL.
+
+  - Behind a filtering proxy? The SDK download must be allowed.
+  - Offline? Retry when connected.
+  - Otherwise grab the current linux zip from
+    https://developer.android.com/studio#command-line-tools-only
+    and re-run with:  EASYOTP_TOOLS_URL=<url> ./dev up
+
+Aborting before the multi-GB build rather than failing partway.
+ERR
+    return 1
+  fi
+  echo "cmdline-tools: $tools"
+  docker build \
+    --build-arg UID="$(id -u)" --build-arg GID="$(id -g)" \
+    --build-arg CMDLINE_TOOLS_URL="$tools" \
+    -t "$IMAGE" "$ROOT/.devcontainer"
+}
+
+up() {
+  docker image inspect "$IMAGE" >/dev/null 2>&1 || build_image
+  running && return 0
+  have_container && { docker start "$CONTAINER" >/dev/null; return 0; }
+  docker volume inspect "$VOLUME" >/dev/null 2>&1 || docker volume create "$VOLUME" >/dev/null
+  docker run -d --name "$CONTAINER" \
+    --memory="$MEM" --memory-swap="$MEM" --cpus=4 \
+    -v "$ROOT:/workspace" \
+    -v "$VOLUME:/home/dev/.gradle" \
+    --network host \
+    "$IMAGE" sleep infinity >/dev/null
+}
+
+case "${1:-help}" in
+  up)      up; echo "container up (capped at $MEM)" ;;
+  shell)   up; shift; docker exec -it "$CONTAINER" bash "$@" ;;
+  run)     up; shift; docker exec -it "$CONTAINER" "$@" ;;
+  build)   up; shift; docker exec -it "$CONTAINER" ./gradlew "${@:-assembleDebug}" ;;
+  rebuild) docker rmi -f "$IMAGE" 2>/dev/null || true; build_image ;;
+
+  # Wireless ADB: Settings > Developer options > Wireless debugging on the handset.
+  # Avoids USB passthrough and the udev rules this host does not have.
+  pair)    up; docker exec -it "$CONTAINER" adb pair "${2:?usage: ./dev pair HOST:PORT}" ;;
+  connect) up; docker exec -it "$CONTAINER" adb connect "${2:?usage: ./dev connect HOST:PORT}" ;;
+  install) up; docker exec -it "$CONTAINER" adb install -r \
+             "app/build/outputs/apk/debug/app-debug.apk" ;;
+  logcat)  up; docker exec -it "$CONTAINER" adb logcat -s EasyOTP:V ;;
+
+  stop)
+    running && docker exec "$CONTAINER" ./gradlew --stop >/dev/null 2>&1 || true
+    running && docker stop "$CONTAINER" >/dev/null || true
+    echo "stopped; host RAM released"
+    ;;
+
+  status)
+    printf 'image     '; docker images -q "$IMAGE" | grep -q . \
+      && docker images --format '{{.Size}}' "$IMAGE" || echo "not built"
+    printf 'container '; running && echo "running" || { have_container && echo "stopped" || echo "absent"; }
+    printf 'volume    '; docker volume inspect "$VOLUME" >/dev/null 2>&1 && echo "present" || echo "absent"
+    running && docker stats --no-stream --format '  mem {{.MemUsage}}  cpu {{.CPUPerc}}' "$CONTAINER"
+    echo "host:"; free -h | sed -n 2p | sed 's/^/  /'
+    ;;
+
+  purge)
+    read -rp "Remove container, image and Gradle cache volume? [y/N] " a
+    [[ ${a,,} == y ]] || { echo "aborted"; exit 0; }
+    docker rm -f "$CONTAINER" 2>/dev/null || true
+    docker rmi -f "$IMAGE"    2>/dev/null || true
+    docker volume rm "$VOLUME" 2>/dev/null || true
+    echo "purged"
+    ;;
+
+  *)
+    cat <<'USAGE'
+./dev up                 start the build container (hard memory cap)
+./dev build [task]       gradlew task, default assembleDebug
+./dev shell              interactive shell inside the container
+./dev pair HOST:PORT     wireless ADB pairing (Developer options)
+./dev connect HOST:PORT  wireless ADB connect
+./dev install            install the debug APK on the connected device
+./dev logcat             tail EasyOTP logs
+./dev status             image/container/volume state + host memory
+./dev stop               stop Gradle daemons and the container (frees RAM)
+./dev rebuild            rebuild the image from the Dockerfile
+./dev purge              remove container, image and Gradle cache
+USAGE
+    ;;
+esac

@@ -1,0 +1,27 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "easyotp",
+  "main": "src/index.ts",
+  "compatibility_date": "2026-08-01",
+  "compatibility_flags": ["nodejs_compat"],
+
+  // Deliberately absent: kv_namespaces, d1_databases, r2_buckets.
+  // The relay stores nothing at rest (docs/DECISIONS.md D3). Adding a storage
+  // binding here is a threat-model change, not a config change.
+
+  "durable_objects": {
+    "bindings": [
+      { "name": "MAILBOX", "class_name": "ChannelMailbox" }
+    ]
+  },
+  "migrations": [
+    { "tag": "v1", "new_classes": ["ChannelMailbox"] }
+  ],
+
+  "observability": { "enabled": true },
+
+  "vars": {
+    "REPLAY_WINDOW_SECONDS": "120",
+    "POLL_HOLD_SECONDS": "55"
+  }
+}

@@ -1,0 +1,22 @@
+{
+  "name": "EasyOTP Android",
+  "build": {
+    "dockerfile": "Dockerfile",
+    "args": { "UID": "1000", "GID": "1000" }
+  },
+  "runArgs": [
+    "--memory=5g",
+    "--memory-swap=5g",
+    "--cpus=4"
+  ],
+  "mounts": [
+    "source=easyotp-gradle,target=/home/dev/.gradle,type=volume"
+  ],
+  "workspaceFolder": "/workspace",
+  "remoteUser": "dev",
+  "customizations": {
+    "vscode": {
+      "extensions": ["fwcd.kotlin", "mathiasfrohlich.Kotlin"]
+    }
+  }
+}
