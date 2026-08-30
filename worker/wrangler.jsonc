@@ -22,6 +22,12 @@
 
   "vars": {
     "REPLAY_WINDOW_SECONDS": "120",
-    "POLL_HOLD_SECONDS": "55"
+    "POLL_HOLD_SECONDS": "55",
+
+    // Telegram always posts webhooks to the Cloudflare front door. The .ir leg
+    // exists for Iranian egress, where consumer-ISP blocking of Cloudflare is
+    // the problem; Telegram's servers have no such difficulty and must not
+    // depend on an Iranian CDN. Override per environment.
+    "WEBHOOK_BASE": "https://easyotp.example.workers.dev"
   }
 }

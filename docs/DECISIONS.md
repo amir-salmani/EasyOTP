@@ -39,13 +39,13 @@ These are two front doors on one origin, not two failure domains. With SMS fallb
 declined, a national shutdown means messages queue on-device and deliver on restore.
 This is an accepted trade, made knowingly, not an oversight.
 
-**Escape hatch if it ever matters:** second origin on `omega-shatel-pve` (existing
-Iranian jump host) makes the legs genuinely independent. Deferred, not designed away.
+**Escape hatch if it ever matters:** a second origin hosted inside Iran makes the two
+legs genuinely independent failure domains. Deferred, not designed away.
 
 **To verify before building the .ir leg:** whether ArvanCloud permits a foreign origin
 at all, and whether it can override the Host header to the `workers.dev` hostname
 (Workers route by Host; without the override the origin fetch 404s). Arvan's own docs
-are unreachable from outside Iran — check via `omega-shatel-pve` or the panel.
+are unreachable from outside Iran — check from inside the country, or via the panel.
 
 ---
 
@@ -103,6 +103,32 @@ the Cloudflare edge relay opaque bytes — the `.ir` leg transits Iranian infras
 under Iranian jurisdiction, and sealing is what makes that an acceptable trade rather
 than a bad one.
 
+**Amended 2026-08-30, during implementation.** The per-request ECDSA signature was
+**removed**. On a relay that stores nothing there is no device registry, so a signature
+can only prove that *someone* holds *some* key — it verifies against no known identity
+and is therefore decoration. Shipping unverifiable crypto is worse than shipping none,
+because it invites the belief that authentication exists.
+
+What replaced it is a one-way hash chain that *is* verifiable without state:
+
+```
+channelId  --H-->  secretToken  --H-->  webhookId
+ (device)          (Telegram)            (public URL)
+```
+
+The relay authorises by hashing forward: a webhook delivery is genuine if
+`H(presented secret) == webhookId` in the path, and a mailbox drain is authorised if
+`H(H(presented channelId)) == webhookId`. Telegram knows `secretToken` and so can post
+updates, but cannot read the mailbox. Anyone who scrapes the public webhook URL gets
+`webhookId`, which grants nothing. No stored mapping is required at any point.
+
+Authentication for `/forward` is the **bot token inside the sealed envelope**, which
+matches reality — anyone holding that token could message the bot directly regardless.
+
+Keystore-backed ECDSA returns when licensing does (D9): a license token bound to a
+device public key makes proof-of-possession meaningful, because then the relay has
+something to verify *against*.
+
 ---
 
 ## D6 — Multiple bots, not forum topics (2026-08-30)
@@ -130,3 +156,60 @@ remain possible for anyone who prefers a single bot; they are not the default.
 persistent forwarder using it dies daily, silently. `specialUse` has no such cap. The
 Play Store justification requirement for `specialUse` does not bind us — distribution
 is sideload/direct, and SMS permissions would disqualify us from Play anyway.
+
+---
+
+## D8 — Monetization and payment rails (2026-08-30)
+
+**Chosen:** AGPL-3.0 for everything. Revenue is a subscription to the **hosted relay**,
+billed through a **merchant of record** (Paddle or equivalent) once the Finnish `Oy`
+exists. No billing code is written before then.
+
+**Rejected:** routing payments through another person's foreign payment account;
+open-core with paid modules; Stripe-direct.
+
+**Why:** A foreign payment gateway is not available to an Iran-resident individual.
+That constraint is temporary and already scheduled away — the Finland company decision
+records that the `Oy` is registered *after* Tampere residency, and relocation is weeks
+out. A Finnish `Oy` makes Paddle or Stripe routine.
+
+Borrowing someone else's account is the tempting shortcut and the wrong trade: it
+misrepresents beneficial ownership to the provider, moves legal and tax liability onto
+whoever's name is on it, and typically ends in frozen funds when the mismatch surfaces.
+For a product sold on "don't trust a random OTP forwarder — here is exactly who we
+are," opaque ownership destroys the asset being sold. Weeks of delay is the cheaper
+side of that trade.
+
+**Merchant of record over Stripe-direct** because MoR absorbs global VAT/sales-tax
+registration, invoicing, and chargebacks. Selling a small subscription into thirty
+countries as a solo operator, tax compliance is the headache, not card processing.
+
+**Sanctions reality:** paying customers are diaspora holding non-Iranian cards, which
+is exactly the target market. Customers still inside Iran cannot be billed by any
+Western processor and are served by the free self-hosted path — which the AGPL
+guarantees rather than merely permits.
+
+**Consequence:** ship free and self-hostable now. Revenue work starts when the `Oy`
+does.
+
+---
+
+## D9 — Entitlement without a database (2026-08-30)
+
+**Chosen:** Offline-verifiable **signed license tokens**. The billing system issues a
+short-lived (≈7 day) Ed25519-signed token to the app; the app presents it with each
+relay request; the relay verifies signature and expiry against a public key in its
+environment. No lookup, no user record.
+
+**Rejected:** the relay querying a subscriptions table.
+
+**Why:** D3 says the relay stores nothing, and a paid tier is the obvious pressure to
+break that. A subscriptions table on the relay reintroduces precisely the user database
+this design exists to avoid, and parks billing identity next to message traffic — the
+two things that must never be correlatable.
+
+Signed tokens keep the relay stateless and keep billing in a **separate Worker** with
+its own storage that never sees message content or bot tokens. The cost is revocation
+lag bounded by the token TTL: a cancelled subscription keeps working until the token
+expires. That is an acceptable price for not holding a customer database next to
+other people's OTPs.

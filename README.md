@@ -1,4 +1,4 @@
-# OTP Forwarder — working name, see "Naming" below
+# EasyOTP
 
 Forward SMS from SIM cards you hold to a Telegram bot you own, over a relay that
 stores nothing.
@@ -48,13 +48,10 @@ is behind CGNAT. Nothing is stored anywhere but the phone.
 
 Design complete. Implementation starting at M1 (see ARCHITECTURE §8).
 
-## Naming
-
-`opt-fwrdr` is a typo for `otp` and is a working directory, not a product name.
-Candidates: **Rasan** (رسان — "deliverer", the root of پیام‌رسان) or **Payvand**
-(پیوند — "link"). Both read in Persian and pronounce in English. Undecided.
-
 ## License
 
-Undecided — see the open questions in the project notes. The client and Worker will be
-open source; a security tool nobody can audit is a security tool nobody should install.
+**AGPL-3.0-only.** Client and relay both. A security tool nobody can audit is a
+security tool nobody should install, and the AGPL means a hosted fork owes its users
+the same source you get.
+
+The hosted relay is the paid product; self-hosting is free and always will be.

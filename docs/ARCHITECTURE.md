@@ -48,7 +48,7 @@ It does the minimum and returns fast:
 4. Enqueue delivery work.
 
 Iranian carriers generally report an empty MSISDN, so the user labels each SIM once in
-the app ("MCI — Amir", "Rightel — Romina") and the label binds to the ICCID.
+the app ("MCI — personal", "Rightel — spouse") and the label binds to the ICCID.
 
 Multipart SMS must be reassembled before classification; an OTP split across two PDUs
 is common and a naive per-PDU forward produces two useless fragments.
@@ -131,8 +131,18 @@ Rules:
                                                      physical possession
 ```
 
-`channelId` is random and device-generated; it is not derived from the bot token, so
-the URL leaks nothing about the bot.
+`channelId` is 32 random bytes generated on the device. Identifiers descend from it by
+a one-way chain, so the relay can authorise every request without storing anything:
+
+```
+channelId  --H-->  secretToken  --H-->  webhookId
+ (device only)     (Telegram knows)     (public URL)
+```
+
+Each link is preimage-resistant, so a later value never yields an earlier one. Telegram
+holds `secretToken` and can therefore post updates but cannot drain the mailbox; the
+`webhookId` in the public URL grants nothing at all. Only the device holds `channelId`.
+Verification is a forward hash and a constant-time compare.
 
 ## 6. Vendor survival
 
