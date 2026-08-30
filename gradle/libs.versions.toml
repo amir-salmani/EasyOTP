@@ -1,11 +1,18 @@
 # Versions resolved from the live repositories on 2026-08-30, not from memory.
+#
+# Deliberately one generation behind the newest. Compose 1.12, core-ktx 1.19 and
+# lifecycle 2.11 all require compiling against API 37, which is catalogued but
+# not installable from the stable SDK channel -- it sits next to
+# platforms;android-CANARY. Building a security product that runs unattended on a
+# phone holding bank OTPs against a preview API surface is not a trade worth
+# making to get a newer layout primitive. Revisit when 37 goes stable.
 [versions]
 agp = "9.3.2"
 kotlin = "2.4.10"
-coreKtx = "1.19.0"
-lifecycle = "2.11.0"
-activityCompose = "1.13.0"
-composeBom = "2026.08.00"
+coreKtx = "1.18.0"
+lifecycle = "2.10.0"
+activityCompose = "1.12.4"
+composeBom = "2026.06.01"
 
 [libraries]
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }

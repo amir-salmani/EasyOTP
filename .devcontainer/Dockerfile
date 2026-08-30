@@ -13,10 +13,13 @@ FROM eclipse-temurin:17-jdk-noble
 ARG CMDLINE_TOOLS_URL=https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
 # Several platforms, not one. sdkmanager cannot fetch packages on a workstation
 # where dl.google.com is blocked (DECISIONS D10), so an SDK component that turns
-# out to be missing costs a CI rebuild plus a multi-GB pull. AndroidX moves its
-# compileSdk floor forward regularly -- Compose 1.12 and core-ktx 1.19 already
-# require 37 -- so the image carries a range and picks the newest build-tools.
-ARG ANDROID_APIS="35 36 37"
+# out to be missing costs a CI rebuild plus a multi-GB pull.
+#
+# 37 is excluded on purpose. It appears in `sdkmanager --list` but will not
+# install -- catalogued without being published to the stable channel, alongside
+# platforms;android-CANARY. Listing it is not the same as being able to install
+# it, which cost two rebuild cycles to learn.
+ARG ANDROID_APIS="35 36"
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk \

@@ -46,7 +46,8 @@ is behind CGNAT. Nothing is stored anywhere but the phone.
 
 ## Status
 
-Relay implemented and tested. Android module scaffolded; M1 capture path in progress.
+Relay implemented and tested. Android app builds and produces a signed debug APK;
+M1 capture path in progress.
 
 ## License
 

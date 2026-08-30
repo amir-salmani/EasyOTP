@@ -158,9 +158,15 @@ easy case. Development must not target only it, or the app dies instantly on MIU
 
 ## 7. Permissions
 
-`RECEIVE_SMS`, `READ_SMS`, `READ_PHONE_STATE` (subscription info), `INTERNET`,
+`RECEIVE_SMS`, `READ_PHONE_STATE` (subscription info), `INTERNET`,
 `FOREGROUND_SERVICE` + `FOREGROUND_SERVICE_SPECIAL_USE`, `RECEIVE_BOOT_COMPLETED`,
-`POST_NOTIFICATIONS`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`.
+`POST_NOTIFICATIONS`, `REQUEST_IGNORE_BATTERY_OPTIMIZATIONS`. Verified against the
+built APK, not just the manifest source.
+
+Notably **not** `READ_SMS`. `RECEIVE_SMS` alone delivers the broadcast; `READ_SMS`
+additionally grants the whole inbox content provider, which this app has no reason to
+touch. It is the single most alarming permission an SMS app can request, and not
+requesting it is worth more than the history feature it would enable.
 
 Later milestones add `SEND_SMS`, `READ_CALL_LOG`, `READ_PHONE_NUMBERS`, `CALL_PHONE`
 (USSD). Each is requested at the point of use, never up front — an OTP forwarder that

@@ -7,11 +7,10 @@ plugins {
 
 android {
     namespace = "ir.rhinocloud.easyotp"
-    // Set by the dependencies, not by preference: Compose 1.12 and core-ktx 1.19
-    // both require compiling against 37 or later. compileSdk only controls which
-    // APIs are visible at compile time -- targetSdk below is the separate,
-    // behaviour-affecting choice.
-    compileSdk = 37
+    // 36 is the newest platform installable from the stable SDK channel; 37 is
+    // catalogued but not published there yet. Dependency versions are pinned to
+    // match in gradle/libs.versions.toml.
+    compileSdk = 36
 
     defaultConfig {
         applicationId = "ir.rhinocloud.easyotp"
