@@ -11,7 +11,9 @@ REMOTE_IMAGE=${EASYOTP_IMAGE:-ghcr.io/amir-salmani/easyotp-build:latest}
 CONTAINER=easyotp-dev
 VOLUME=easyotp-gradle
 ROOT="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
-MEM=${EASYOTP_MEM:-5g}
+# Below what the host usually has free, so a runaway build is killed inside the
+# container instead of dragging the desktop into swap.
+MEM=${EASYOTP_MEM:-4g}
 
 # Run as the host uid/gid rather than trusting the image's USER. Ubuntu 24.04
 # bases ship an `ubuntu` account already holding uid 1000, so an image that
@@ -109,7 +111,15 @@ case "${1:-help}" in
   up)      up; echo "container up (capped at $MEM)" ;;
   shell)   up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" bash "$@" ;;
   run)     up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" "$@" ;;
-  build)   up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" ./gradlew "${@:-assembleDebug}" ;;
+  # Prefer a Gradle already present over ./gradlew, which would otherwise
+  # re-download a 130MB distribution it does not need. CI still uses the wrapper,
+  # so the canonical build path is unchanged -- this only saves the local link.
+  build)   up; shift; docker exec "${TTY[@]}" "${AS_USER[@]}" "$CONTAINER" bash -lc '
+             for g in "$(command -v gradle)" "$HOME/.gradle/dist/gradle-9.7.1/bin/gradle" ./gradlew; do
+               [ -x "$g" ] && exec "$g" "$@"
+             done
+             echo "no gradle available" >&2; exit 1
+           ' _ "${@:-assembleDebug}" ;;
   pull)        pull_image ;;
   build-image) build_image ;;
   rebuild)     docker rmi -f "$IMAGE" 2>/dev/null || true; ensure_image ;;

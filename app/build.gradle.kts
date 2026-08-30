@@ -1,19 +1,24 @@
 plugins {
     alias(libs.plugins.android.application)
-    alias(libs.plugins.kotlin.android)
+    // No kotlin-android plugin: AGP 9.0+ provides Kotlin support built in and
+    // rejects the standalone plugin. See kotl.in/gradle/agp-built-in-kotlin.
     alias(libs.plugins.kotlin.compose)
 }
 
 android {
     namespace = "ir.rhinocloud.easyotp"
-    compileSdk = 35
+    // Set by the dependencies, not by preference: Compose 1.12 and core-ktx 1.19
+    // both require compiling against 37 or later. compileSdk only controls which
+    // APIs are visible at compile time -- targetSdk below is the separate,
+    // behaviour-affecting choice.
+    compileSdk = 37
 
     defaultConfig {
         applicationId = "ir.rhinocloud.easyotp"
         // API 26 is the floor for TelephonyManager.sendUssdRequest, which M2 needs
         // for balance and package checks -- the feature that keeps a remote SIM alive.
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 1
         versionName = "0.1.0"
     }
@@ -30,7 +35,6 @@ android {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
     }
-    kotlin { jvmToolchain(17) }
 
     buildFeatures { compose = true }
 }

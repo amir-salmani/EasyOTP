@@ -80,8 +80,8 @@ jobs:
           # for a check that actually passed.
           installed=$(run 'sdkmanager --list_installed')
           echo "$installed"
-          for pkg in "build-tools;36.0.0" "build-tools;35.0.0" "platform-tools" \
-                     "platforms;android-36" "platforms;android-35"; do
+          for pkg in "platform-tools" \
+                     "platforms;android-35" "platforms;android-36" "platforms;android-37"; do
             grep -qF "$pkg" <<<"$installed" \
               || { echo "::error::missing SDK package $pkg"; exit 1; }
           done

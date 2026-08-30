@@ -11,13 +11,12 @@ FROM eclipse-temurin:17-jdk-noble
 # these filenames carry a build number and rot without warning (the 2024
 # 11076708 build is already a 404). The default below is only a fallback.
 ARG CMDLINE_TOOLS_URL=https://dl.google.com/android/repository/commandlinetools-linux-11076708_latest.zip
-# Two platforms: AGP 9 may require the newer one, and sdkmanager cannot fetch
-# packages from a workstation where dl.google.com is blocked (DECISIONS D10),
-# so everything the build might need has to ship in the image.
-ARG ANDROID_API=36
-ARG ANDROID_API_ALT=35
-ARG BUILD_TOOLS=36.0.0
-ARG BUILD_TOOLS_ALT=35.0.0
+# Several platforms, not one. sdkmanager cannot fetch packages on a workstation
+# where dl.google.com is blocked (DECISIONS D10), so an SDK component that turns
+# out to be missing costs a CI rebuild plus a multi-GB pull. AndroidX moves its
+# compileSdk floor forward regularly -- Compose 1.12 and core-ktx 1.19 already
+# require 37 -- so the image carries a range and picks the newest build-tools.
+ARG ANDROID_APIS="35 36 37"
 
 ENV ANDROID_HOME=/opt/android-sdk \
     ANDROID_SDK_ROOT=/opt/android-sdk \
@@ -50,12 +49,18 @@ RUN set -eux; \
 
 RUN set -eux; \
     yes | sdkmanager --licenses > /dev/null; \
-    sdkmanager --install \
-        "platform-tools" \
-        "platforms;android-${ANDROID_API}" \
-        "platforms;android-${ANDROID_API_ALT}" \
-        "build-tools;${BUILD_TOOLS}" \
-        "build-tools;${BUILD_TOOLS_ALT}" > /dev/null; \
+    pkgs="platform-tools"; \
+    for api in $ANDROID_APIS; do pkgs="$pkgs platforms;android-$api"; done; \
+    # Newest build-tools available, since AGP pins a minimum that tracks the
+    # newest platform and refuses an override to an earlier revision.
+    latest_bt=$(sdkmanager --list 2>/dev/null \
+        | grep -oE 'build-tools;[0-9]+\.[0-9]+\.[0-9]+' | sort -uV | tail -1); \
+    test -n "$latest_bt"; \
+    # Only the newest, plus revisions confirmed to exist. Guessing a name like
+    # "build-tools;37.0.0" would fail the whole image build if it is not published.
+    pkgs="$pkgs $latest_bt build-tools;36.0.0 build-tools;35.0.0"; \
+    echo "installing: $pkgs"; \
+    sdkmanager --install $pkgs > /dev/null; \
     rm -rf "$ANDROID_HOME/.temp" /root/.android
 
 # Match the host uid/gid so bind-mounted sources do not end up root-owned.
