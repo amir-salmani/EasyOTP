@@ -74,6 +74,7 @@ jobs:
           echo "home is writable:"; run 'touch "$HOME/.gradle/.w"'
           echo "jdk:"; run 'java -version 2>&1 | head -1'
           echo "adb:"; run 'adb version | head -1'
+          echo "gradle:"; run 'gradle --version | grep "^Gradle"'
           # Capture once. Piping `docker run` into `grep -q` makes grep close the
           # pipe early, docker takes SIGPIPE, and pipefail then reports a failure
           # for a check that actually passed.

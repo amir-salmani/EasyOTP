@@ -46,7 +46,7 @@ is behind CGNAT. Nothing is stored anywhere but the phone.
 
 ## Status
 
-Design complete. Implementation starting at M1 (see ARCHITECTURE §8).
+Relay implemented and tested. Android module scaffolded; M1 capture path in progress.
 
 ## License
 

@@ -246,3 +246,35 @@ anyway. The blockade only forced a good practice earlier than convenient.
 nothing else. Contributors elsewhere can use either path. This is worth stating in
 CONTRIBUTING — a project for Iranians that cannot be built from Iran would be a poor
 joke.
+
+---
+
+## D11 — Dependency mirrors, and the supply-chain debt they create (2026-08-30)
+
+**Chosen:** builds may resolve AndroidX and Gradle plugins through a third-party
+mirror, opt-in per machine via `EASYOTP_MIRRORS=true`. CI and unrestricted
+contributors use Google and Maven Central directly.
+
+**Rejected:** making the mirror the default; vendoring artifacts into the repo.
+
+**Why:** Google's Maven repository is served from `dl.google.com`, which is blocked
+from the primary development machine (D10). Without a mirror the Android build cannot
+resolve a single AndroidX artifact, so there is no build at all.
+
+**The debt, stated plainly.** A mirror is an entity that can serve a *different* artifact
+than the one the authoritative repository holds. For an app that handles other people's
+one-time passwords, silently trusting one is exactly the supply-chain compromise the
+threat model is supposed to care about — and it is invisible in a successful build.
+
+Three things keep it honest rather than hidden:
+
+1. **Opt-in and environment-scoped.** It cannot be switched on by a committed file, so
+   a contributor never uses a mirror without having typed it.
+2. **CI never uses it.** The published APK is built from the authoritative repositories.
+3. **Gradle dependency verification is the real fix** — `gradle/verification-metadata.xml`
+   with checksums generated in CI from Google and Maven Central, then enforced locally.
+   The mirror may then serve bytes, but not *different* bytes.
+
+Item 3 is **not yet implemented** and is the outstanding debt. It should land once the
+dependency set stops moving, and before any release build. Until then, a mirrored local
+build is a development convenience and must never produce a shipped artifact.

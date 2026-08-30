@@ -37,6 +37,17 @@ RUN set -eux; \
 
 ENV PATH=$PATH:$ANDROID_HOME/cmdline-tools/latest/bin:$ANDROID_HOME/platform-tools
 
+# Gradle itself, so bootstrapping the wrapper does not require a 130MB download
+# on a constrained link. Once gradlew is committed the wrapper manages its own
+# distribution, but a fresh clone still needs something to generate it with.
+ARG GRADLE_VERSION=9.7.1
+RUN set -eux; \
+    curl -fsSL -o /tmp/gradle.zip "https://services.gradle.org/distributions/gradle-${GRADLE_VERSION}-bin.zip"; \
+    unzip -q /tmp/gradle.zip -d /opt; \
+    ln -s "/opt/gradle-${GRADLE_VERSION}/bin/gradle" /usr/local/bin/gradle; \
+    rm /tmp/gradle.zip; \
+    gradle --version
+
 RUN set -eux; \
     yes | sdkmanager --licenses > /dev/null; \
     sdkmanager --install \

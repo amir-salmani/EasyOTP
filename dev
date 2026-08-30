@@ -17,7 +17,7 @@ MEM=${EASYOTP_MEM:-5g}
 # bases ship an `ubuntu` account already holding uid 1000, so an image that
 # tried to create its own user there may not have one. Overriding here keeps
 # bind-mounted files host-owned and works whichever way the image was built.
-AS_USER=(--user "$(id -u):$(id -g)" -e HOME=/home/dev)
+AS_USER=(--user "$(id -u):$(id -g)" -e HOME=/home/dev -e EASYOTP_MIRRORS=true)
 
 # Allocate a TTY only when there is one, so ./dev works from scripts and CI.
 TTY=(-i); [[ -t 0 && -t 1 ]] && TTY=(-it)
