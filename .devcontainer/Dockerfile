@@ -49,19 +49,32 @@ RUN set -eux; \
 
 RUN set -eux; \
     yes | sdkmanager --licenses > /dev/null; \
+    # One catalogue fetch, reused. Printed so the build log records exactly what
+    # was on offer -- dl.google.com is unreachable from the workstation, so this
+    # log is the only window into what the SDK repository actually publishes.
+    sdkmanager --list > /tmp/avail.txt 2>/dev/null || true; \
+    echo "--- platforms available ---"; \
+    grep -oE 'platforms;android-[A-Za-z0-9]+' /tmp/avail.txt | sort -uV; \
+    echo "--- build-tools available (newest 5) ---"; \
+    grep -oE 'build-tools;[0-9]+\.[0-9]+\.[0-9]+' /tmp/avail.txt | sort -uV | tail -5; \
     pkgs="platform-tools"; \
-    for api in $ANDROID_APIS; do pkgs="$pkgs platforms;android-$api"; done; \
-    # Newest build-tools available, since AGP pins a minimum that tracks the
-    # newest platform and refuses an override to an earlier revision.
-    latest_bt=$(sdkmanager --list 2>/dev/null \
-        | grep -oE 'build-tools;[0-9]+\.[0-9]+\.[0-9]+' | sort -uV | tail -1); \
+    # Install only what is actually published. A platform can be preview-only and
+    # absent from the stable channel even while its build-tools have shipped, so
+    # naming one unconditionally fails the entire image build.
+    for api in $ANDROID_APIS; do \
+        if grep -q "platforms;android-$api\b" /tmp/avail.txt; then \
+            pkgs="$pkgs platforms;android-$api"; \
+        else \
+            echo "note: platforms;android-$api not published, skipping"; \
+        fi; \
+    done; \
+    latest_bt=$(grep -oE 'build-tools;[0-9]+\.[0-9]+\.[0-9]+' /tmp/avail.txt | sort -uV | tail -1); \
     test -n "$latest_bt"; \
-    # Only the newest, plus revisions confirmed to exist. Guessing a name like
-    # "build-tools;37.0.0" would fail the whole image build if it is not published.
-    pkgs="$pkgs $latest_bt build-tools;36.0.0 build-tools;35.0.0"; \
+    pkgs="$pkgs $latest_bt"; \
     echo "installing: $pkgs"; \
     sdkmanager --install $pkgs > /dev/null; \
-    rm -rf "$ANDROID_HOME/.temp" /root/.android
+    sdkmanager --list_installed; \
+    rm -rf "$ANDROID_HOME/.temp" /root/.android /tmp/avail.txt
 
 # Match the host uid/gid so bind-mounted sources do not end up root-owned.
 #
