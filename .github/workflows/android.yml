@@ -38,11 +38,13 @@ jobs:
           cache: npm
           cache-dependency-path: worker/package-lock.json
 
-      - name: Verify Android/Worker HPKE interop against a fresh fixture
+      - name: Verify Android/Worker wire contracts against fresh fixtures
         run: |
           set -euo pipefail
           test -f app/build/interop/hpke-fixture.json
+          test -f app/build/interop/ids-fixture.json
           cp app/build/interop/hpke-fixture.json worker/test/hpke-fixture.json
+          cp app/build/interop/ids-fixture.json worker/test/ids-fixture.json
           cd worker
           npm ci
           npx vitest run test/interop.spec.ts

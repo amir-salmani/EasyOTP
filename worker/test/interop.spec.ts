@@ -22,7 +22,8 @@ import { CipherSuite, HkdfSha256, DhkemX25519HkdfSha256 } from "@hpke/core";
 import { Chacha20Poly1305 } from "@hpke/chacha20poly1305";
 import { INTEROP_PRIVATE_KEY, INTEROP_PUBLIC_KEY } from "./interop-keys";
 import fixture from "./hpke-fixture.json";
-import { fromB64url } from "../src/ids";
+import idsFixture from "./ids-fixture.json";
+import { fromB64url, secretTokenFrom, webhookIdFrom } from "../src/ids";
 
 const suite = new CipherSuite({
   kem: new DhkemX25519HkdfSha256(),
@@ -68,5 +69,30 @@ describe("Tink -> hpke-js interop", () => {
     // The Android side splits Tink's output at a fixed offset. If X25519's
     // encapsulated key were any other length, every envelope would be corrupt.
     expect(fromB64url(fixture.enc).length).toBe(32);
+  });
+});
+
+describe("identifier chain: Android <-> Worker", () => {
+  /**
+   * The relay stores no mapping, so it authorises by recomputing this chain and
+   * comparing. A derivation that differs by one byte between the two languages
+   * does not throw anywhere: enrolment reports success, the webhook is
+   * registered under an id the device cannot derive, and nothing is ever
+   * delivered. Only a shared fixture catches it.
+   */
+  it("derives the same secret token as the Android client", async () => {
+    expect(await secretTokenFrom(idsFixture.channelId)).toBe(idsFixture.secretToken);
+  });
+
+  it("derives the same webhook id as the Android client", async () => {
+    expect(await webhookIdFrom(idsFixture.secretToken)).toBe(idsFixture.webhookId);
+  });
+
+  it("authorises a poll using the Android-derived identifiers", async () => {
+    // The end-to-end consequence: a device that computed these values locally
+    // can drain its own mailbox, and knowing only the public webhook id cannot.
+    const { webhookId, channelId } = idsFixture;
+    const authorised = await webhookIdFrom(await secretTokenFrom(channelId));
+    expect(authorised).toBe(webhookId);
   });
 });
