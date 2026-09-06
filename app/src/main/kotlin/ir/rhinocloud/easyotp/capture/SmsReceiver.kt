@@ -7,6 +7,7 @@ import android.provider.Telephony
 import android.util.Log
 import ir.rhinocloud.easyotp.data.CapturedMessage
 import ir.rhinocloud.easyotp.data.Outbox
+import ir.rhinocloud.easyotp.service.ForwarderService
 import java.util.concurrent.Executors
 
 /**
@@ -63,6 +64,10 @@ class SmsReceiver : BroadcastReceiver() {
                 // Never the sender or the body (THREAT-MODEL rule 1). Length and
                 // slot are enough to tell a working pipeline from a stalled one.
                 Log.i(TAG, "captured len=${body.length} slot=${sim.slotIndex} new=$stored")
+
+                // Persist first, then nudge. If the service cannot start the
+                // message is already durable and the next wake will carry it.
+                if (stored) ForwarderService.wake(context.applicationContext)
             } catch (e: Exception) {
                 // Swallow rather than crash: an exception escaping a manifest
                 // receiver kills the app for every subsequent message too.

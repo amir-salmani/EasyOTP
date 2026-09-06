@@ -1,3 +1,6 @@
 <resources>
     <string name="app_name">EasyOTP</string>
+    <string name="notification_channel">Forwarding</string>
+    <string name="notification_idle">Watching for messages</string>
+    <string name="notification_pending">%1$d waiting to send</string>
 </resources>

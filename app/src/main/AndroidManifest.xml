@@ -48,5 +48,32 @@
             </intent-filter>
         </receiver>
 
+        <!--
+          specialUse, not dataSync: Android 15 caps dataSync foreground services
+          at six hours per twenty-four, which would kill the forwarder daily and
+          silently on a phone nobody is watching (DECISIONS D7).
+        -->
+        <service
+            android:name=".service.ForwarderService"
+            android:exported="false"
+            android:foregroundServiceType="specialUse">
+            <property
+                android:name="android.app.PROPERTY_SPECIAL_USE_FGS_SUBTYPE"
+                android:value="Forwards SMS from SIMs held by the device owner to their own Telegram bot, which requires a persistent process because messages arrive at any time." />
+        </service>
+
+        <!--
+          The device is unattended in another country. Without this, a power cut
+          or an OS update stops forwarding until someone physically opens the app.
+        -->
+        <receiver
+            android:name=".service.BootReceiver"
+            android:exported="true">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+            </intent-filter>
+        </receiver>
+
     </application>
 </manifest>
