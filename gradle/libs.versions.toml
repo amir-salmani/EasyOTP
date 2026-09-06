@@ -17,6 +17,9 @@ composeBom = "2026.06.01"
 [libraries]
 tink-android = { module = "com.google.crypto.tink:tink-android", version = "1.23.0" }
 junit = { module = "junit:junit", version = "4.13.2" }
+# Real org.json for unit tests. The android.jar stub throws "not mocked" on
+# every method, so any code path touching JSON is untestable without it.
+json = { module = "org.json:json", version = "20260814" }
 androidx-core-ktx = { module = "androidx.core:core-ktx", version.ref = "coreKtx" }
 androidx-lifecycle-runtime-ktx = { module = "androidx.lifecycle:lifecycle-runtime-ktx", version.ref = "lifecycle" }
 androidx-lifecycle-service = { module = "androidx.lifecycle:lifecycle-service", version.ref = "lifecycle" }

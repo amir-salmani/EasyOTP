@@ -325,3 +325,28 @@ theatre.
 
 The Keystore key is non-exportable and hardware-backed where the device offers it, so
 the blobs are useless if the database is copied off the device without the key.
+
+---
+
+## D14 — HttpURLConnection, not OkHttp (2026-09-06)
+
+**Chosen:** the platform HTTP client.
+
+**Rejected:** OkHttp.
+
+**Why:** OkHttp 5.5.0 requires compiling against API 37, which is catalogued but
+not installable from the stable SDK channel (D10 records the same wall for the
+AndroidX generation). Rather than hunt for an older OkHttp release and pin another
+dependency to a version nobody upstream is testing, note that Android's
+`HttpURLConnection` is *implemented on top of OkHttp* by the platform. The
+connection pooling and TLS handling are already there.
+
+What this app asks of an HTTP client is small: POST a sub-kilobyte JSON body with
+short timeouts, and later hold a long-poll open for about a minute. All of that is
+`setConnectTimeout`, `setReadTimeout`, and a stream.
+
+It also removes a dependency from a security product's supply chain, which is not
+nothing while dependency verification is still outstanding (D11).
+
+**Revisit if** the client needs HTTP/2 multiplexing, interceptors, or certificate
+pinning against a rotating key set. None of those are on the M1..M3 path.
