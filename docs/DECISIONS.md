@@ -278,3 +278,50 @@ Three things keep it honest rather than hidden:
 Item 3 is **not yet implemented** and is the outstanding debt. It should land once the
 dependency set stops moving, and before any release build. Until then, a mirrored local
 build is a development convenience and must never produce a shipped artifact.
+
+---
+
+## D12 — Hand-written SQLite for the outbox, not Room (2026-08-30)
+
+**Chosen:** a single `SQLiteOpenHelper` and a small DAO, roughly 150 lines.
+
+**Rejected:** Room with KSP.
+
+**Why:** the outbox is **one table**. Room's value is code generation across a schema
+of many entities and relations; here it buys almost nothing and costs an annotation
+processor. That processor is not free right now: AGP 9 provides Kotlin support built
+in, KSP versions are pinned to exact Kotlin releases, and this project has already
+spent several cycles on toolchain drift it did not choose. Adding a codegen plugin to
+the critical path of a build that must work from a network where half the ecosystem is
+blocked is a poor trade.
+
+It also helps the security story. The outbox is where other people's messages sit at
+rest, and a reviewer can read every statement that touches it without first knowing
+what Room generated.
+
+**Revisit if** the schema grows past two or three tables with relations between them.
+
+---
+
+## D13 — Encrypt the payload, not the database (2026-08-30)
+
+**Chosen:** message content is sealed with an AES-256-GCM key held in the Android
+Keystore and stored as an opaque blob. Queue metadata — the SIM's ICCID, timestamps,
+delivery state, attempt counts — is stored in the clear.
+
+**Rejected:** SQLCipher for whole-database encryption.
+
+**Why:** SQLCipher encrypts everything including the columns the queue must sort and
+filter on, costs several megabytes of native libraries per ABI, and puts a third-party
+crypto implementation on the critical path. Sealing just the payload gives the property
+that actually matters — an attacker with the database file gets no message bodies — and
+leaves the queue ordinary SQL.
+
+**What this deliberately does not protect:** the metadata. Someone with the file learns
+that a given SIM received a message at a given time, and how many messages are pending.
+On a device whose physical possession is already game over (THREAT-MODEL A4), spending
+complexity to hide timing metadata from an attacker who is holding the SIM would be
+theatre.
+
+The Keystore key is non-exportable and hardware-backed where the device offers it, so
+the blobs are useless if the database is copied off the device without the key.
