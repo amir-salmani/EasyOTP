@@ -25,6 +25,28 @@ jobs:
       # Note the absence of EASYOTP_MIRRORS. CI resolves from Google and Maven
       # Central directly, so a published artifact is never built through a
       # third-party mirror (DECISIONS D11).
+      - name: Unit tests
+        run: ./gradlew testDebugUnitTest --no-daemon --stacktrace
+
+      # The committed fixture only proves that whatever sealed it interoperates.
+      # Regenerating here and opening it with the real relay suite is what makes
+      # a change to either side's HPKE settings fail, instead of surfacing later
+      # as the relay silently rejecting every message sent from the field.
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+          cache-dependency-path: worker/package-lock.json
+
+      - name: Verify Android/Worker HPKE interop against a fresh fixture
+        run: |
+          set -euo pipefail
+          test -f app/build/interop/hpke-fixture.json
+          cp app/build/interop/hpke-fixture.json worker/test/hpke-fixture.json
+          cd worker
+          npm ci
+          npx vitest run test/interop.spec.ts
+
       - name: Assemble debug
         run: ./gradlew assembleDebug --no-daemon --stacktrace
 

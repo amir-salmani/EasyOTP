@@ -49,5 +49,9 @@ dependencies {
     implementation(libs.androidx.compose.ui.tooling.preview)
     implementation(libs.androidx.compose.material3)
 
+    // HPKE (RFC 9180). The platform has no X25519 before API 33 and this app
+    // supports 26, so the suite has to come from a library.
+    implementation(libs.tink.android)
+
     testImplementation(libs.junit)
 }
