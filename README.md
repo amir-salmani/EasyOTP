@@ -46,8 +46,12 @@ is behind CGNAT. Nothing is stored anywhere but the phone.
 
 ## Status
 
-Relay implemented and tested. Android app builds and produces a signed debug APK;
-M1 capture path in progress.
+M1 in progress. The relay, capture, storage, sealing, failover, delivery and
+enrolment paths are built and tested (57 Android tests, 20 worker tests), including
+cross-language fixtures that pin both wire contracts between app and relay.
+
+**Nothing has run on a real phone yet, and no relay is deployed.** Current state,
+open debts and the next step: [`docs/STATUS.md`](docs/STATUS.md).
 
 ## License
 
